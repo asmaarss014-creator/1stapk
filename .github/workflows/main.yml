@@ -1,101 +1,56 @@
-name: Universal ZIP Preparer
+name: Build Dara Helper Tool APK
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: write
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
 
 jobs:
-  unzip:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          fetch-depth: 0
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
 
-
-      - name: Install Archive Tools
-        continue-on-error: true
+      - name: Check Dara Project
         run: |
-          sudo apt-get update -y || true
-          sudo apt-get install -y \
-            unzip \
-            zip \
-            p7zip-full \
-            tar \
-            gzip \
-            xz-utils \
-            rsync || true
+          echo "Repository:"
+          ls -la
 
+          echo ""
+          echo "Dara folder:"
+          ls -la dara
 
-      - name: Create Extraction Folder
+      - name: Grant Execute Permission for Gradlew
         run: |
-          mkdir -p extracted
+          chmod +x dara/gradlew || true
 
-
-      - name: Extract ZIP Files
-        continue-on-error: true
+      - name: Build Debug APK
+        working-directory: dara
         run: |
-          find . -type f -iname "*.zip" | while read file
-          do
-            echo "Extracting $file"
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
 
-            unzip -o "$file" -d extracted || true
-          done
-
-
-      - name: Extract Other Archives
-        continue-on-error: true
+      - name: Show APK Files
         run: |
+          find dara -type f -name "*.apk" -print
 
-          find . -type f -iname "*.7z" | while read file
-          do
-            echo "Extracting $file"
-            7z x "$file" -oextracted || true
-          done
-
-
-          find . -type f -iname "*.tar.gz" | while read file
-          do
-            echo "Extracting $file"
-            tar -xzf "$file" -C extracted || true
-          done
-
-
-      - name: Move Extracted Files Into Repository
-        continue-on-error: true
-        run: |
-          rsync -av extracted/ ./ || true
-
-
-      - name: Remove Empty Extraction Folder
-        continue-on-error: true
-        run: |
-          rm -rf extracted || true
-
-
-      - name: Commit Extracted Files
-        continue-on-error: true
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-
-          git add .
-
-          git commit -m "Auto extract archive files" || true
-
-          git push || true
-
-
-      - name: Completed
-        run: |
-          echo "Archive extraction completed."
-          echo "Extracted files were saved into the repository."
-          echo "Unsupported files were skipped."
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DaraHelperTool-Debug-APK
+          path: dara/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
