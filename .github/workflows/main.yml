@@ -15,53 +15,79 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show Project
-        run: |
-          echo "=== Dara Android Project ==="
-          find dara/android_app -maxdepth 3 -type f | sort
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Check Gradle
-        working-directory: dara/android_app
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.2"
+
+      - name: Find Gradle Project
         run: |
-          echo "=== Gradle Files ==="
-          ls -la
+          echo "===== ALL FILES INSIDE DARA ====="
+          find dara -type f -print | sort
+
           echo ""
-          echo "=== Settings ==="
-          cat settings.gradle || true
+          echo "===== SEARCHING FOR GRADLE ROOT ====="
+
+          find dara -type f \( \
+            -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \
+            -o -name "settings.gradle.dcl" \
+          \) -print
+
           echo ""
-          echo "=== Gradle Version ==="
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew --version
+          echo "===== SEARCHING FOR GRADLE WRAPPER ====="
+
+          find dara -type f \( \
+            -name "gradlew" \
+            -o -name "gradlew.bat" \
+          \) -print
+
+      - name: Build
+        run: |
+          SETTINGS=$(find dara -type f \( \
+            -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \
+            -o -name "settings.gradle.dcl" \
+          \) -print -quit)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "❌ ERROR 101: No Gradle settings file exists inside dara/"
+            echo ""
+            echo "Expected one of:"
+            echo "settings.gradle"
+            echo "settings.gradle.kts"
+            echo "settings.gradle.dcl"
+            exit 101
           fi
 
-      - name: Compile App
-        working-directory: dara/android_app
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          PROJECT_DIR=$(dirname "$SETTINGS")
 
-      - name: Check APK
-        run: |
-          echo "=== APK RESULTS ==="
-          find dara/android_app -type f -name "*.apk" -print
+          echo "✅ Gradle project found:"
+          echo "$PROJECT_DIR"
 
-          if find dara/android_app -type f -name "*.apk" | grep -q .; then
-            echo "✅ APK BUILD SUCCESSFUL"
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --stacktrace
           else
-            echo "❌ NO APK WAS GENERATED"
-            exit 1
+            gradle assembleDebug --stacktrace
           fi
 
-      - name: Upload Test APK
+      - name: Find APK
+        run: |
+          echo "===== APK ====="
+          find dara -type f -name "*.apk" -print
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Dara-Test-APK
-          path: dara/android_app/**/build/outputs/apk/**/*.apk
+          path: dara/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
