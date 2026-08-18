@@ -22,23 +22,51 @@ jobs:
           distribution: "temurin"
           cache: gradle
 
-      - name: Grant Gradle Permission
+      - name: Find Dara Gradle Project
         run: |
-          chmod +x dara/android_app/gradlew
+          echo "===== REPOSITORY ====="
+          find . -maxdepth 3 -type f | sort
 
-      - name: Build Debug APK
-        working-directory: dara/android_app
-        run: |
-          ./gradlew assembleDebug --stacktrace
+          echo ""
+          echo "===== GRADLE FILES ====="
+          find dara -type f \( \
+            -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \
+            -o -name "build.gradle" \
+            -o -name "build.gradle.kts" \
+            -o -name "gradlew" \
+          \) -print
 
-      - name: Find APK
+      - name: Build Dara APK
         run: |
-          echo "===== GENERATED APK ====="
-          find dara/android_app -type f -name "*.apk" -print
+          PROJECT_DIR=$(dirname "$(find dara -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)")
+
+          if [ -z "$PROJECT_DIR" ] || [ "$PROJECT_DIR" = "." ]; then
+            echo "ERROR: No Gradle settings file was found inside dara/"
+            echo ""
+            echo "Your dara folder does not currently contain a Gradle project."
+            exit 101
+          fi
+
+          echo "Gradle project found at: $PROJECT_DIR"
+
+          if [ -f "$PROJECT_DIR/gradlew" ]; then
+            chmod +x "$PROJECT_DIR/gradlew"
+            cd "$PROJECT_DIR"
+            ./gradlew assembleDebug --stacktrace
+          else
+            cd "$PROJECT_DIR"
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Find Generated APK
+        run: |
+          echo "===== APK FILES ====="
+          find dara -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: DaraHelperTool-Debug-APK
-          path: dara/android_app/app/build/outputs/apk/debug/app-debug.apk
+          path: dara/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
